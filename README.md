@@ -1,1 +1,1 @@
-# scpignore
+# escp

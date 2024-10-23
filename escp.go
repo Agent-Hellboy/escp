@@ -14,7 +14,7 @@ import (
 func getPatterns(filename string) []string {
 	data, err := os.ReadFile(filename)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	if data == nil {
 		return nil

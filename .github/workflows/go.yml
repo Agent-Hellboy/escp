@@ -47,31 +47,34 @@ jobs:
           path: |
             dist/
 
-  release:
-    name: Release
-    needs: build
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+release:
+  name: Release
+  needs: build
+  runs-on: ubuntu-latest
+  if: startsWith(github.ref, 'refs/tags/v')
 
-    steps:
-      - name: Download Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: dist
+  steps:
+    - name: Download Artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: dist
 
-      - name: Prepare for Release
-        id: prep
-        run: |
-          ls -R
-          echo "tags=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+    - name: Prepare for Release
+      id: prep
+      run: |
+        ls -R
+        echo "tags=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
-      - name: Create GitHub Release
-        uses: ncipollo/release-action@v1
-        with:
-          artifacts: "dist/escp"
-          tag: ${{ github.ref }}
-          name: ${{ steps.prep.outputs.tags }}
-          body: |
-            escp version ${{ steps.prep.outputs.tags }} is now available.
-          draft: false
-          prerelease: false
+    - name: Create GitHub Release
+      uses: ncipollo/release-action@v1
+      with:
+        artifacts: "dist/escp"
+        tag: ${{ github.ref }}
+        name: ${{ steps.prep.outputs.tags }}
+        body: |
+          escp version ${{ steps.prep.outputs.tags }} is now available.
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}  # Use the personal access token
+

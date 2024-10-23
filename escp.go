@@ -16,9 +16,6 @@ func getPatterns(filename string) []string {
 	if err != nil {
 		return nil, err
 	}
-	if data == nil {
-		return nil
-	}
 
 	content := string(data)
 	lines := strings.Split(content, "\n")

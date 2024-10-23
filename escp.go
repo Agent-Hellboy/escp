@@ -70,7 +70,8 @@ func match(patterns []string, fileOrDir string) bool {
 func main() {
 	// Validate the number of arguments
 	if len(os.Args) < 3 {
-		log.Fatal("Usage: go run main.go <source> <destination>")
+		fmt.Println("Usage: go run main.go <source> <destination>")
+		return
 	}
 
 	// Get the source and destination directories from the arguments

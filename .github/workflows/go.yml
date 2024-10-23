@@ -2,52 +2,66 @@ name: Build and Release escp
 
 on:
   push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
-  workflow_dispatch:
+    branches:
+      - main
+      - "feature/**"    
+    tags:
+      - v*              
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    steps:
-      # Checkout the code
-      - uses: actions/checkout@v4
 
-      # Set up Go
-      - name: Set up Go
-        uses: actions/setup-go@v4
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
         with:
           go-version: '1.22.4'  
 
-      # Build the Go binary
-      - name: Build binary
-        run: go build -o escp
+      
+      - name: Build escp binary
+        run: go build -o escp  
 
-      # Archive the binary as an artifact
-      - name: Upload Binary to Release
-        uses: actions/upload-artifact@v3
+      - name: Prepare dist directory
+        run: |
+          mkdir -p dist
+          mv escp dist/   # Move the binary to dist directory
+
+      - name: Store Artifacts
+        uses: actions/upload-artifact@v4
         with:
-          name: escp-binary
-          path: ./escp
-          
+          name: dist
+          path: |
+            dist/          # Upload the dist folder for later use in release
+
   release:
-    runs-on: ubuntu-latest
+    name: Release
     needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')  
+
     steps:
-      # Checkout the code
-      - uses: actions/checkout@v4
-
-      # Download the artifact (the binary) from the previous build job
-      - name: Download Build Artifact
-        uses: actions/download-artifact@v3
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
         with:
-          name: escp-binary
+          name: dist
 
-      # Create a release and upload the binary
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
+      - name: Prepare for Release
+        id: prep
+        run: |
+          ls -R
+          echo "tags=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT  # Extract tag name from ref
+
+      - name: Create GitHub Release
+        uses: ncipollo/release-action@v1
         with:
-          files: escp
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          artifacts: "dist/escp"  # Upload the escp binary
+          tag: ${{ github.ref }}  # Use the tag that triggered the workflow
+          name: ${{ steps.prep.outputs.tags }}  # Release name is based on the tag
+          body: |
+            escp version ${{ steps.prep.outputs.tags }} is now available.
+          draft: false
+          prerelease: false

@@ -1,11 +1,8 @@
 name: Build and Release escp
 
 on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
-  workflow_dispatch:
+  release:
+    types: [published]  # This will trigger the workflow only when a release is published
 
 jobs:
   build:
@@ -18,7 +15,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: '1.22.4'  
+          go-version: '1.22.4'  # Matches the version in your go.mod
 
       # Build the Go binary
       - name: Build binary

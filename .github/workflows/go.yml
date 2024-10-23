@@ -4,9 +4,9 @@ on:
   push:
     branches:
       - main
-      - "feature/**"    
+      - "feature/**"
     tags:
-      - v*              
+      - v*
 
 jobs:
   build:
@@ -19,29 +19,39 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22.4'  # Matches the version in your go.mod
+          go-version: '1.22.4'
 
-      
+      # Build the binary
       - name: Build escp binary
-        run: go build -o escp  
+        run: go build -o escp
 
+      # Debug step: Print the current directory structure
+      - name: List directory structure after build
+        run: ls -R
+
+      # Prepare dist directory and move binary
       - name: Prepare dist directory
         run: |
           mkdir -p dist
-          mv escp dist/   # Move the binary to dist directory
+          mv escp dist/
 
+      # Debug step: Print directory structure after moving binary to dist/
+      - name: List directory structure after moving binary
+        run: ls -R dist
+
+      # Upload the dist folder as an artifact
       - name: Store Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: dist
           path: |
-            dist/          # Upload the dist folder for later use in release
+            dist/
 
   release:
     name: Release
     needs: build
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')  
+    if: startsWith(github.ref, 'refs/tags/v')
 
     steps:
       - name: Download Artifacts
@@ -53,14 +63,14 @@ jobs:
         id: prep
         run: |
           ls -R
-          echo "tags=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT  # Extract tag name from ref
+          echo "tags=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
         uses: ncipollo/release-action@v1
         with:
-          artifacts: "dist/escp"  # Upload the escp binary
-          tag: ${{ github.ref }}  # Use the tag that triggered the workflow
-          name: ${{ steps.prep.outputs.tags }}  # Release name is based on the tag
+          artifacts: "dist/escp"
+          tag: ${{ github.ref }}
+          name: ${{ steps.prep.outputs.tags }}
           body: |
             escp version ${{ steps.prep.outputs.tags }} is now available.
           draft: false

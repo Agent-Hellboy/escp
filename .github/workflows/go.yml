@@ -1,17 +1,12 @@
 name: Build and Release escp
 
 on:
-<<<<<<< HEAD
   push:
     branches:
       - main
       - "feature/**"    
     tags:
       - v*              
-=======
-  release:
-    types: [published]  # This will trigger the workflow only when a release is published
->>>>>>> 08f2b57353477d06b5eb0f7453ddcb5ae73ae080
 
 jobs:
   build:

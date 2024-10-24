@@ -30,6 +30,11 @@ type SCPManager struct{}
 
 // GetPatterns reads the .scpignore file and returns the patterns
 func (scp *SCPManager) GetPatterns(filename string) ([]string, error) {
+	// Check if the .scpignore file exists
+	if _, err := os.Stat(filename); os.IsNotExist(err) {
+		// If the file does not exist, return an empty slice (no patterns to ignore)
+		return nil, nil
+	}
 	file, err := os.Open(filename)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file: %v", err)
@@ -180,7 +185,6 @@ func (pm *SimplePatternMatcher) ShouldIgnore(path string) bool {
 	return false
 }
 
-// Main program entry
 func main() {
 	if len(os.Args) < 3 {
 		fmt.Println("Usage: go run main.go <source> <destination>")
@@ -193,7 +197,7 @@ func main() {
 
 	scp := &SCPManager{}
 
-	// Read ignore patterns from the .scpignore file
+	// Try to get patterns from .scpignore file, but proceed even if it's not present
 	patterns, err := scp.GetPatterns(filepath.Join(currentDir, ".scpignore"))
 	if err != nil {
 		log.Fatalf("Error reading patterns: %v", err)
@@ -205,8 +209,12 @@ func main() {
 		log.Fatalf("Error parsing directory: %v", err)
 	}
 
-	// Filter files based on the patterns in the .scpignore file
-	toCopy = scp.FilterFiles(toCopy, patterns)
+	// If patterns are found in .scpignore, filter files; otherwise, copy everything
+	if len(patterns) > 0 {
+		toCopy = scp.FilterFiles(toCopy, patterns)
+	} else {
+		fmt.Println(".scpignore not found, copying all files.")
+	}
 
 	if len(toCopy) == 0 {
 		fmt.Println("No files to copy based on the .scpignore patterns.")

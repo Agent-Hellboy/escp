@@ -17,7 +17,7 @@ To build the binary for `escp`, follow these steps:
 
 1. Clone the repository:
     ```bash
-    git clone https://github.com/yourusername/escp.git
+    git clone https://github.com/Agent-Hellboy/escp.git
     cd escp
     ```
 

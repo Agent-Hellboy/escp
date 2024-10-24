@@ -2,6 +2,8 @@
 
 `escp` (Enhanced SCP) is a tool designed to work like `scp` but with the added capability of automatically ignoring files or folders based on specified patterns (similar to `.gitignore`). It is especially useful for uploading files to remote servers like EC2, while excluding certain files or directories that you don't want to upload.
 
+[![codecov](https://codecov.io/gh/Agent-Hellboy/escp/graph/badge.svg?token=596VLH7OJR)](https://codecov.io/gh/Agent-Hellboy/escp)
+
 ## Why `escp`?
 
 While working with `scp` to upload files to EC2, I wanted a way to automate the process and ignore files or folders of specific patterns (e.g., log files, temporary files, or large directories). With `escp`, you can define a `.scpignore` file, similar to `.gitignore`, to list patterns of files or directories to exclude during the `scp` upload.

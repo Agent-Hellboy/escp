@@ -1,6 +1,9 @@
 name: Release escp Binary
 
 on:
+  # Run tests on every push, pull request, and release event
+  push:
+  pull_request:
   release:
     types:
       - published  # This will trigger when a release is published
@@ -41,9 +44,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
+  # Release job to build the binary and upload to GitHub
   release:
     name: Build and Release escp
     runs-on: ubuntu-latest
+    if: github.event_name == 'release' && github.event.action == 'published'  # Run only on release
 
     steps:
       - name: Checkout Code
@@ -72,6 +77,7 @@ jobs:
       - name: List directory structure after moving binary
         run: ls -R dist
 
+      # Upload files to a GitHub release
       - name: Upload files to a GitHub release
         uses: svenstaro/upload-release-action@2.9.0
         with:

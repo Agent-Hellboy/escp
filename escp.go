@@ -27,7 +27,7 @@ type PatternMatcher interface {
 // FileManager is the interface for handling file-related operations
 type FileManager interface {
 	GetPatterns(filename string) ([]string, error)
-	FilterFiles(files []string, patterns []string) []string
+	FilterFiles(files []string, patterns []string, ignoreRoot string) []string
 	ParseDirectory(source string) ([]string, error)
 	IsDirEmpty(path string) (bool, error)
 	CopyFiles(files []string, destination string) error
@@ -76,14 +76,14 @@ func (scp *SCPManager) GetPatterns(filename string) ([]string, error) {
 	return patterns, nil
 }
 
-// FilterFiles filters out files that match the patterns from the provided list of files
-func (scp *SCPManager) FilterFiles(files []string, patterns []string) []string {
+// FilterFiles filters out files that match the patterns from the provided list of files.
+func (scp *SCPManager) FilterFiles(files []string, patterns []string, ignoreRoot string) []string {
 	if len(files) == 0 {
 		return nil
 	}
 
 	var filtered []string
-	matcher := NewGitIgnoreMatcher(patterns, commonBaseDir(files))
+	matcher := NewGitIgnoreMatcher(patterns, ignoreRoot)
 	for _, file := range files {
 		if !matcher.ShouldIgnore(file) {
 			filtered = append(filtered, file)
@@ -513,7 +513,7 @@ func main() {
 
 	// If patterns are found in .scpignore, filter files; otherwise, copy everything
 	if len(patterns) > 0 {
-		toCopy = scp.FilterFiles(toCopy, patterns)
+		toCopy = scp.FilterFiles(toCopy, patterns, currentDir)
 	} else {
 		fmt.Println(".scpignore not found, copying all files.")
 	}

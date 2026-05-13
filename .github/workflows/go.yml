@@ -4,6 +4,7 @@ on:
   # Run tests on every push, pull request, and release event
   push:
   pull_request:
+  workflow_dispatch:
   release:
     types:
       - published  # This will trigger when a release is published
@@ -28,8 +29,6 @@ jobs:
 
       # Run the tests with coverage for the escp project
       - name: Run tests with coverage
-        env:
-          ESCP_E2E_SSH_URL: ${{ secrets.ESCP_E2E_SSH_URL }}
         run: |
           go test -v -coverprofile=coverage.tmp ./...
           cat coverage.tmp | grep -v "_test\.go" > coverage.txt
@@ -45,6 +44,25 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  e2e-ssh:
+    name: E2E SSH tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref_protected)
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Run SSH E2E tests
+        env:
+          ESCP_E2E_SSH_URL: ${{ secrets.ESCP_E2E_SSH_URL }}
+        run: go test -v -run '^TestE2ERemoteCopyWithGitIgnore$' ./...
 
   # Release job to build the binary and upload to GitHub
   release:

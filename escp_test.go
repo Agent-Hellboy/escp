@@ -1,9 +1,9 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"os/exec"
@@ -15,18 +15,12 @@ import (
 
 // TestGetPatterns tests the GetPatterns function for reading ignore patterns
 func TestGetPatterns(t *testing.T) {
-	// Create a temporary directory
-	tmpDir, err := ioutil.TempDir("", "test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	// Create a mock .scpignore file in the temp directory
 	scpignorePath := filepath.Join(tmpDir, ".scpignore")
 	patternsContent := "*.log\n# Ignore backup files\n*.bak\nsecret/*"
-	err = ioutil.WriteFile(scpignorePath, []byte(patternsContent), 0644)
-	if err != nil {
+	if err := os.WriteFile(scpignorePath, []byte(patternsContent), 0644); err != nil {
 		t.Fatalf("Failed to write .scpignore file: %v", err)
 	}
 
@@ -152,17 +146,14 @@ func TestHostKeyCallbackRejectsMissingKnownHosts(t *testing.T) {
 
 // TestParseDirectory tests the ParseDirectory function for listing files
 func TestParseDirectory(t *testing.T) {
-	// Create a temporary directory with some files and subdirectories
-	tmpDir, err := ioutil.TempDir("", "test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	// Create files and subdirectories
-	os.Mkdir(filepath.Join(tmpDir, "subdir"), 0755)
-	ioutil.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte("test"), 0644)
-	ioutil.WriteFile(filepath.Join(tmpDir, "file2.log"), []byte("test"), 0644)
+	if err := os.Mkdir(filepath.Join(tmpDir, "subdir"), 0755); err != nil {
+		t.Fatalf("Failed to create subdir: %v", err)
+	}
+	writeTestFile(t, filepath.Join(tmpDir, "file1.txt"), "test")
+	writeTestFile(t, filepath.Join(tmpDir, "file2.log"), "test")
 
 	scp := &SCPManager{}
 	files, err := scp.ParseDirectory(tmpDir)
@@ -199,7 +190,7 @@ func TestFilterFiles(t *testing.T) {
 	patterns := []string{"*.log", "*.bak"}
 
 	scp := &SCPManager{}
-	filteredFiles := scp.FilterFiles(files, patterns)
+	filteredFiles := scp.FilterFiles(files, patterns, ".")
 
 	expectedFilteredFiles := []string{
 		"file1.txt",
@@ -246,7 +237,7 @@ func TestFilterFilesUsesGitIgnoreNegation(t *testing.T) {
 	}
 
 	scp := &SCPManager{}
-	filteredFiles := scp.FilterFiles(files, patterns)
+	filteredFiles := scp.FilterFiles(files, patterns, ".")
 
 	expectedFilteredFiles := []string{
 		"keep.log",
@@ -273,7 +264,7 @@ func TestFilterFilesUsesGitIgnoreAnchoredPatterns(t *testing.T) {
 	patterns := []string{"/build"}
 
 	scp := &SCPManager{}
-	filteredFiles := scp.FilterFiles(files, patterns)
+	filteredFiles := scp.FilterFiles(files, patterns, ".")
 
 	expectedFilteredFiles := []string{
 		"src/build/app",
@@ -300,7 +291,7 @@ func TestFilterFilesUsesGitIgnoreDoubleStar(t *testing.T) {
 	patterns := []string{"**/generated/**"}
 
 	scp := &SCPManager{}
-	filteredFiles := scp.FilterFiles(files, patterns)
+	filteredFiles := scp.FilterFiles(files, patterns, ".")
 
 	expectedFilteredFiles := []string{
 		"src/api.go",
@@ -327,21 +318,42 @@ func TestGitIgnoreMatcherTreatsInlineHashAsLiteral(t *testing.T) {
 	}
 }
 
+func TestFilterFilesAnchorsPatternsToIgnoreRoot(t *testing.T) {
+	projectRoot := t.TempDir()
+	files := []string{
+		filepath.Join(projectRoot, "subdir", "build", "artifact"),
+		filepath.Join(projectRoot, "subdir", "main.go"),
+	}
+	patterns := []string{"/build"}
+
+	scp := &SCPManager{}
+	filteredFiles := scp.FilterFiles(files, patterns, projectRoot)
+
+	if len(filteredFiles) != len(files) {
+		t.Fatalf("Expected anchored root pattern to keep subdir files, got %v", filteredFiles)
+	}
+
+	for i, expectedFile := range files {
+		if filteredFiles[i] != expectedFile {
+			t.Fatalf("Expected file %s, but got %s", expectedFile, filteredFiles[i])
+		}
+	}
+}
+
 // TestIsDirEmpty tests the IsDirEmpty function for checking if a directory is empty
 func TestIsDirEmpty(t *testing.T) {
-	// Create a temporary directory for testing
-	tmpDir, err := ioutil.TempDir("", "test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	// Create an empty subdirectory
-	os.Mkdir(filepath.Join(tmpDir, "emptydir"), 0755)
+	if err := os.Mkdir(filepath.Join(tmpDir, "emptydir"), 0755); err != nil {
+		t.Fatalf("Failed to create emptydir: %v", err)
+	}
 
 	// Create a non-empty subdirectory
-	os.Mkdir(filepath.Join(tmpDir, "nonemptydir"), 0755)
-	ioutil.WriteFile(filepath.Join(tmpDir, "nonemptydir", "file.txt"), []byte("test"), 0644)
+	if err := os.Mkdir(filepath.Join(tmpDir, "nonemptydir"), 0755); err != nil {
+		t.Fatalf("Failed to create nonemptydir: %v", err)
+	}
+	writeTestFile(t, filepath.Join(tmpDir, "nonemptydir", "file.txt"), "test")
 
 	scp := &SCPManager{}
 
@@ -453,8 +465,14 @@ func TestE2ERemoteCopyWithGitIgnore(t *testing.T) {
 		t.Fatalf("Create test .ssh directory: %v", err)
 	}
 
-	knownHosts, err := exec.Command("ssh-keyscan", "-p", remote.Port, remote.Host).Output()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	knownHosts, err := exec.CommandContext(ctx, "ssh-keyscan", "-p", remote.Port, remote.Host).Output()
 	if err != nil {
+		if ctx.Err() != nil {
+			t.Fatalf("Scan remote host key: %v", ctx.Err())
+		}
 		t.Fatalf("Scan remote host key: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(sshDir, "known_hosts"), knownHosts, 0600); err != nil {
@@ -493,7 +511,7 @@ func TestE2ERemoteCopyWithGitIgnore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Read .scpignore: %v", err)
 	}
-	files = scp.FilterFiles(files, patterns)
+	files = scp.FilterFiles(files, patterns, sourceDir)
 
 	if err := scp.CopyFiles(files, remoteDestination(remote)); err != nil {
 		t.Fatalf("Copy files to remote server: %v", err)

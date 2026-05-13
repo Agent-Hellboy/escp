@@ -10,7 +10,8 @@ While working with `scp` to upload files to EC2, I wanted a way to automate the 
 
 ## Features
 
-- **Pattern-based exclusion**: Define file and directory patterns in a `.scpignore` file to automatically exclude them from being uploaded.
+- **Git-style exclusion**: Define file and directory patterns in a `.scpignore` file using `.gitignore`-style syntax, including negation, anchored patterns, and `**`.
+- **Native SSH transport**: Connects with `golang.org/x/crypto/ssh` instead of shelling out to the local `scp` binary.
 
 
 ## Installation
@@ -23,7 +24,7 @@ To build the binary for `escp`, follow these steps:
     cd escp
     ```
 
-2. Build the binary:
+2. Build the binary with Go 1.25 or newer:
     ```bash
     go build -o escp
     ```
@@ -37,17 +38,58 @@ To build the binary for `escp`, follow these steps:
 
 1. Create a `.scpignore` file in the root of your project (same directory where you're running `escp`) and add the patterns you want to ignore. Example `.scpignore`:
     ```plaintext
-    *.log          # Ignore all log files
-    temp/          # Ignore everything in the temp directory
-    secret/*.key   # Ignore all key files in the secret directory
+    # Ignore all log files
+    *.log
+
+    # Ignore everything in the temp directory
+    temp/
+
+    # Ignore key files directly under secret
+    secret/*.key
+
+    # Keep one log file even though *.log is ignored
+    !keep.log
     ```
 
-2. Use `escp` to copy files just like you would with `scp`. The tool will automatically read the `.scpignore` file and skip files that match the patterns:
+2. Make sure SSH authentication is available. `escp` uses `SSH_AUTH_SOCK` when an agent is running, and also tries unencrypted `~/.ssh/id_ed25519`, `~/.ssh/id_rsa`, and `~/.ssh/id_ecdsa` keys. The destination host must be present in `~/.ssh/known_hosts`.
+
+    If you do not already have a key that can log in to the server, generate one locally:
+    ```bash
+    ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -C "escp"
+    ```
+
+    Add the generated public key to the remote user's authorized keys on the server:
+    ```bash
+    cat ~/.ssh/id_ed25519.pub
+    ```
+
+    Copy that output into the server file for the user you will connect as. For root, that file is:
+    ```bash
+    /root/.ssh/authorized_keys
+    ```
+
+    The server-side permissions should be:
+    ```bash
+    chmod 700 /root/.ssh
+    chmod 600 /root/.ssh/authorized_keys
+    ```
+
+    If you use a non-default key path, add it to your local SSH agent before running `escp`:
+    ```bash
+    ssh-add ~/.ssh/your_key
+    ```
+
+    Test SSH directly first:
+    ```bash
+    ssh root@your-server
+    ```
+
+3. Use `escp` to copy files just like you would with `scp`. The tool will automatically read the `.scpignore` file and skip files that match the patterns:
     ```bash
     ./escp source_directory/ user@ec2:/path/to/destination
     ```
 
-3. `escp` will print the list of files being copied and will exclude those specified in the `.scpignore` file.
+4. `escp` uploads the filtered files and empty directories to the destination path.
 
 ## Example
 
@@ -87,6 +129,70 @@ The following files will be ignored:
 - `project/secret/api.key`
 
 
+## Debugging SSH Authentication
+
+If normal SSH works but `escp` cannot authenticate, check whether SSH works without an interactive password or passphrase prompt:
+
+```bash
+ssh -o BatchMode=yes root@your-server true
+```
+
+Inspect the SSH configuration and identity files OpenSSH will try:
+
+```bash
+ssh -G root@your-server
+```
+
+Check whether your SSH agent is reachable and has loaded keys:
+
+```bash
+ssh-add -l
+```
+
+Run a verbose SSH probe to see the exact key OpenSSH accepts:
+
+```bash
+ssh -vvv -o BatchMode=yes -o ConnectTimeout=10 root@your-server true
+```
+
+Test `escp` with the SSH agent disabled to confirm fallback to default keys such as `~/.ssh/id_ed25519`:
+
+```bash
+env -u SSH_AUTH_SOCK ./escp ./project root@your-server:/tmp/escp-test-default-key
+```
+
+Verify the copied files on the server:
+
+```bash
+ssh -o BatchMode=yes root@your-server find /tmp/escp-test-default-key -maxdepth 3 -type f -print
+```
+
+## Remote E2E Testing
+
+The unit test suite includes an opt-in remote E2E test. It is skipped unless `ESCP_E2E_SSH_URL` is set.
+
+Use this format:
+
+```bash
+ESCP_E2E_SSH_URL='root:password@your-server'
+```
+
+For a custom SSH port:
+
+```bash
+ESCP_E2E_SSH_URL='root:password@your-server:2222'
+```
+
+Then run:
+
+```bash
+go test -v ./...
+```
+
+The E2E test creates a temporary source tree with a `.scpignore`, copies it to `/tmp/escp-e2e-*` on the server, verifies that ignored files were not uploaded, and removes the remote test directory afterward.
+
+In GitHub Actions, add a repository secret named `ESCP_E2E_SSH_URL` with the same `username:password@host[:port]` format. If the secret is missing, CI still runs unit tests and skips the remote E2E test.
+
 ## Improving `escp`
 
 1. **Performance Enhancements**:
@@ -106,8 +212,8 @@ The following files will be ignored:
 ## Testing `escp`
 
 1. **Pattern Matching Test Cases**:
-   - Test common patterns (`*.log`, `subdir/`, `subdir/*`).
-   - Check that deeply nested directories are correctly ignored.
+   - Test common Git-style patterns (`*.log`, `subdir/`, `subdir/*`, `/build`, `**/generated/**`, `!keep.log`).
+   - Check that deeply nested directories, anchored patterns, negation, and literal `#` characters are handled correctly.
 
 2. **Unit Tests**:
    - Write Go unit tests for key functions like `shouldIgnore`, `filterFiles`, and `parseDirectory`.
@@ -115,8 +221,8 @@ The following files will be ignored:
 3. **Integration Tests**:
    - Run integration tests to ensure `escp` works as expected across different directory structures and file patterns.
 
-4. **Use `.gitignore` Test Suite for Inspiration**:
-   - Git’s `.gitignore` test suite can serve as a great reference. Build a similar test suite to ensure `escp` reliably ignores files and directories based on the defined patterns.
+4. **Git Ignore Semantics**:
+   - `escp` uses `github.com/go-git/go-git/v5/plumbing/format/gitignore` for `.gitignore`-style matching. Add regression tests from Git ignore edge cases when changing ignore behavior.
 
 
 ## Contributions
